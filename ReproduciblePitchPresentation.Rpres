@@ -1,0 +1,215 @@
+Dashboard For Analyzing New York Air Quality Measurements
+========================================================
+author: Jagadeesha
+date: 8-Oct-2018
+font-family: 'Calibri'
+
+<style>
+body {
+  background-color:#EFEFEF;
+}
+.small-code pre code {
+  font-size: 16px;
+}
+/* slide titles */
+.reveal h3 { 
+  font-size: 70px;
+  color: #156209;
+}
+
+img{
+margin-left:8px!important;
+max-height:260px!important;
+}
+
+/* heading for slides with two hashes ## */
+.reveal .slides section .slideContent h2 {
+   font-size: 25px;
+   color: #6C6F6C;
+}
+
+/* ordered and unordered list styles */
+.reveal ul, 
+.reveal ol {
+    font-size: 25px;
+    color: #6C6F6C;
+    line-height:30px;
+}
+
+em{
+  font-size: 20px!important;
+  color: #6C6F6C;
+  line-height:21px!important;
+}
+
+</style>
+
+Application Description
+========================================================
+![alt text](screen.png)
+
+- **Input** : Dropdown to choose month, Slider to choose weeks and Checkbox list to choose plots.
+
+- **Output** : Average of variables for selected duration displayed in tiles and 4 plots.
+
+***
+
+- Aim of this application is to provide a simple dashboard using shiny for air quality measurement dataset. 
+- The `airquality` dataset provides daily air quality measurements in New York, May to September 1973.
+  
+- Following are the 4 plots based on selected period, provided to analyze the data. 
+  + Mean Ozone per day.
+  + Solar radiation per day.
+  + Weekly wind speed comparison.
+  + Ozone - Temperature per day.
+
+Filtering the dataset based on inputs (month and weeks)
+========================================================
+class: small-code
+- The `airquality` dataset is filtered when the user chooses the month and weeks in the user interface.
+- *Example:* Suppose the user selects the month 'June' and weeks 2 to 4.
+```{r}
+sMonth <- 6 #input$month
+sWeeks <- seq(2,4,1) #seq(input$week[1],input$week[2],1)
+dataset <- airquality[airquality$Month==sMonth,]
+dataset$Week <- ifelse((dataset$Day%%7)==0,(dataset$Day%/%7),(dataset$Day%/%7)+1) 
+dataset$DayOfWeek <- ifelse((dataset$Day%%7)==0,7,(dataset$Day%%7)) 
+dataset <- dataset[dataset$Week %in% sWeeks,]
+head(dataset)
+```
+
+Average of variables
+========================================================
+class: small-code
+![alt text](tiles.png)
+
+- Average of 4 variables for the selected duration are displayed in the tiles above the plot.
+- R code in server.R file to generate the average of temperature *(Note: The code is not evaluated and hence the output is not displayed in the slide)*
+
+```{r, eval=FALSE}
+avgTemp <- reactive({
+      paste0("<span class=\"tileText\">",
+             format(round(mean(dataset$Temp, na.rm=TRUE), 2), nsmall = 2),"</span>")
+    })
+    output$tempAvg <- renderText({ 
+      paste("Average temperature (degrees F)", avgTemp(), sep="<br/>")
+    })
+```
+- Corresponding R code in ui.R
+```{r, eval=FALSE}
+column(width = 3, class="tile", htmlOutput("tempAvg")
+```
+
+Plots
+========================================================
+class: small-code
+- The user defined R function `multiplot` allows the application to change the layout dynamically as per the number of plots selected by the user as shown below.
+*(Note: The Code is lengthy and hence not displayed in the slide)*
+
+```{r, echo=FALSE}
+library(ggplot2)
+ multiplot <- function(lst, plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(lst, plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+p1 <- ggplot(dataset, aes(x=Day, y=Ozone)) +
+      geom_bar(stat="identity", fill="darkgreen")+
+      ggtitle("Ozone")
+    
+    # Second plot
+    p2 <- ggplot(dataset, aes(x=Day, y=Solar.R)) +
+      geom_bar(stat="identity", fill="purple")+
+      ggtitle("Solar Radiation")
+    
+    # Third plot
+    p3 <- ggplot(data=dataset, aes(x=DayOfWeek, y=Wind, 
+              group = factor(Week), colour = factor(Week))) +
+      geom_line() +
+      geom_point( size=3, shape=21, fill="white")+
+      ggtitle("Weekly Wind Speed Comparison ")+ 
+      labs(colour="Week")
+    
+    spline_int <- as.data.frame(spline(dataset$Day, dataset$Temp))
+    # Fourth plot
+    p4 <- ggplot(dataset) + 
+      geom_point(aes(x = Day, y = Temp, colour = Ozone), size = 3) +
+      scale_color_gradient(low="blue", high="red")+
+      geom_line(data = spline_int, aes(x = x, y = y))+
+      ggtitle("Ozone - Temperature")
+    
+    options <- c(1,2,3,4) #For all 4 plots
+    lst <- list()
+    if(1 %in% options){
+      lst1 <- list(p1)
+      lst <- c(lst,lst1)
+    }
+    if(2 %in% options){
+      lst2 <- list(p2)
+      lst <- c(lst,lst2)
+    }
+    if("3" %in% options){
+      lst3<- list(p3)
+      lst <- c(lst,lst3)
+    }
+    if("4" %in% options){
+      lst4 <- list(p4)
+      lst <- c(lst,lst4)
+    }
+    
+    col <- length(options)
+    
+    if(length(options)==4 || length(options)==0 ){
+      col <- 2
+    }
+
+    multiplot(lst, cols=col)
+    
+   
+```
+
+*Source code is available at https://github.com/JagadeeshaKV/NewYorkAirQuality/*
+
+***
+
+- The server.R code to plot bar chart for ozone per day and its output are given below.
+
+```{r, echo=TRUE, height=3, width=4 }
+    p1 <- ggplot(dataset, aes(x=Day, y=Ozone)) +
+      geom_bar(stat="identity", fill="darkgreen")+
+      ggtitle("Ozone")
+    p1
+```
+
+*Shiny app is hosted at https://jagadeeshakv.shinyapps.io/NewyorkWeather/*
